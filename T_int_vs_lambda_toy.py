@@ -35,6 +35,86 @@ from cosmo_flux_lambda import (
 from bh_interior_toy import fit_scaling_law
 
 
+# =============================================================================
+# Wrapper function for module import
+# =============================================================================
+
+def get_T_int_vs_OmegaLambda(omega_lambda_values=None, verbose=False):
+    """
+    Compute interior lifetime T_int as a function of Omega_Lambda.
+
+    This function can be imported by other scripts to get the T_int(Omega_Lambda)
+    relationship without running the full plotting routine.
+
+    Parameters
+    ----------
+    omega_lambda_values : array-like, optional
+        Omega_Lambda values to compute. Default: [0.1, 0.3, 0.5, 0.7, 0.9]
+    verbose : bool
+        If True, print progress messages
+
+    Returns
+    -------
+    omega_lambda_array : ndarray
+        Array of Omega_Lambda values
+    T_int_array : ndarray
+        Corresponding interior lifetime values
+    """
+    if omega_lambda_values is None:
+        omega_lambda_values = [0.1, 0.3, 0.5, 0.7, 0.9]
+
+    # Fit the scaling law T_int(L_in) from Program 2
+    if verbose:
+        print("Fitting T_int(L_in) scaling law...")
+    A, p, L_fit, T_fit = fit_scaling_law(
+        L_in_values=[0.01, 0.02, 0.05, 0.1, 0.2],
+        N_u=200, N_v=200, U_max=10.0, V_max=10.0
+    )
+    if verbose:
+        print(f"  T_int = {A:.4f} * L_in^(-{p:.4f})")
+
+    # Black hole parameters
+    M_bh = 1e8 * M_sun  # 10^8 solar masses
+
+    # Get default L_crit
+    L_crit, L_ref = get_default_L_crit(M_bh)
+
+    # Compute T_int for each Omega_Lambda
+    T_int_list = []
+
+    for Omega_Lambda in omega_lambda_values:
+        if verbose:
+            print(f"  Processing Omega_Lambda = {Omega_Lambda}...", end=" ", flush=True)
+
+        # Get flux history and isolation time from Program 1
+        t_array_Gyr, L_in_array_W, t_iso_Gyr = compute_flux_history_and_isolation(
+            Omega_Lambda, M_bh, L_crit,
+            t_min_Gyr=0.5, t_max_Gyr=200.0, n_t=500
+        )
+
+        # Compute effective flux: average from t_min to t_iso
+        if t_iso_Gyr is not None:
+            mask = t_array_Gyr <= t_iso_Gyr
+            L_eff = np.nanmean(L_in_array_W[mask])
+        else:
+            # If no isolation, use average over first 50 Gyr
+            mask = t_array_Gyr <= 50.0
+            L_eff = np.nanmean(L_in_array_W[mask])
+
+        # Normalize L_eff to the toy model scale
+        scale_factor = 0.1  # Map L_ref -> 0.1 in toy units
+        L_eff_toy = L_eff / L_ref * scale_factor
+
+        # Compute T_int using the scaling law
+        T_int_eff = A * (L_eff_toy ** (-p))
+        T_int_list.append(T_int_eff)
+
+        if verbose:
+            print(f"T_int = {T_int_eff:.4f}")
+
+    return np.array(omega_lambda_values), np.array(T_int_list)
+
+
 def main():
     print("=" * 70)
     print("Toy Model: Interior Lifetime vs Cosmological Constant")
