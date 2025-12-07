@@ -278,6 +278,78 @@ def N_BH_v3_detailed(omega_lambda, z_max=10.0, nz=400, omega_lambda_ref=0.7,
 
 
 # =============================================================================
+# BH Number Density (per unit comoving volume)
+# =============================================================================
+
+def N_BH_v3_density(omega_lambda, z_max=10.0, nz=400):
+    """
+    Compute a v3 estimate of the *number density* of BHs
+    (per unit comoving volume) as a function of omega_lambda
+    by integrating the BH formation rate over cosmic time only.
+
+    Unlike N_BH_v3 which integrates over volume (giving total BH count),
+    this integrates only over time:
+
+    n_BH(OL) ~ integral_0^{z_max} dz * n_dot_BH(z; OL) * |dt/dz|
+
+    This gives BH number density per comoving volume, which removes
+    the volume factor that causes N_BH to increase with Omega_Lambda.
+
+    Parameters
+    ----------
+    omega_lambda : float
+        Dark energy density parameter
+    z_max : float
+        Maximum redshift for integration (default 10)
+    nz : int
+        Number of redshift grid points (default 400)
+
+    Returns
+    -------
+    n_BH : float
+        BH number density (arbitrary normalization, per comoving volume)
+
+    Notes
+    -----
+    The integral combines:
+    - n_dot_BH: BH formation rate density [#/Mpc^3/Gyr]
+    - |dt/dz|: time per unit redshift [Gyr/dz]
+
+    No dVc/dz factor, so this is density not total count.
+    """
+    # Check for valid cosmology
+    omega_m = 1.0 - omega_lambda
+    if omega_m <= 0.01 or omega_m >= 0.99:
+        return 0.0
+
+    # Build redshift grid
+    z_array = np.linspace(0, z_max, nz)
+
+    # Compute integrand at each z
+    integrand = np.zeros(nz)
+
+    for i, z in enumerate(z_array):
+        # Skip z=0 to avoid potential issues
+        if z < 1e-6:
+            integrand[i] = 0.0
+            continue
+
+        # BH formation rate density
+        n_dot = bh_formation_rate_density(z, omega_lambda)
+
+        # Time per unit redshift (no volume factor!)
+        dt = dt_dz(z, omega_lambda)
+
+        # Integrand: n_dot * |dt/dz|
+        integrand[i] = n_dot * dt
+
+    # Trapezoidal integration
+    n_BH = np.trapz(integrand, z_array)
+
+    return n_BH
+
+
+# =============================================================================
 # Test
 # =============================================================================
 
